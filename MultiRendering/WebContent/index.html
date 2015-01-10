@@ -1,0 +1,63 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="UTF-8">
+<title>Insert title here</title>
+<style type="text/css">
+#content {
+   width: 420px;
+   height: 700px;
+   background-color: black;
+   color: white;
+}
+
+#log {
+   width: 400px;
+   height: 300px;
+}
+
+#myCanvas {
+   border: 1px red solid;
+   margin: auto 9px auto 9px;
+}
+</style>
+</head>
+<body>
+    <div id="content">
+        <a href="web-workers.html" style="display: block; text-decoration: none; font-family: cursive; font-size: 14pt;">Other test</a> <br />
+        <button onclick="sendMessage()">Send message</button>
+        <br />
+        <button onclick="stop()">Stop worker</button>
+        <br />
+        <canvas id="myCanvas" width="400" height="400"></canvas>
+        <div id="log">init</div>
+        <br />
+    </div>
+
+    <script type="text/javascript">
+                    //<![CDATA[
+                    
+                    var worker = new Worker("./js/worker.js");
+                    var myCanvas = document.getElementById("myCanvas");
+                    
+                    worker.addEventListener("message", function(e) {
+                        console.log("recived message : " + e.data.msg);
+                        document.getElementById("log").innerHTML += '<br/>' + e.data.msg;
+                    }, false);
+                    
+                    function sendMessage() {
+                        console.log("send message");
+                        worker.postMessage({
+                            "msg" : "hello"
+                        });
+                    }
+
+                    function stop() {
+                        worker.terminate();
+                    }
+
+                    //]]>
+                </script>
+
+</body>
+</html>

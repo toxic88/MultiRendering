@@ -1,0 +1,348 @@
+<!DOCTYPE html>
+<html>
+<head>
+<title>Performance-demo</title>
+<meta name="apple-mobile-web-app-capable" content="yes" />
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+<style>
+body {
+   background: black;
+}
+
+#mainContent {
+   width: 910px;
+   background: white;
+   margin: 0px auto 200px auto;
+   background: white;
+   margin: 0px auto 200px auto;
+   overflow: auto;
+}
+
+#canvas_element {
+   width: 900px;
+}
+
+#appCanvas {
+   width: 400px;
+   height: 200px;
+   background-color: black;
+   border: 1px solid red;
+   float: left;
+   margin: 10px 10px 10px 10px;
+}
+
+#copyCanvas {
+   width: 400px;
+   height: 200px;
+   background-color: black;
+   border: 1px solid red;
+   float: right;
+   margin: 10px 10px 10px 10px;
+}
+
+#imagesBlock {
+   display: block;
+   width: 900px;
+   height: 250px;
+}
+
+#imagesBlock img {
+   border: 2px red solid;
+   margin: 10px 10px 10px 10px;
+}
+
+#firstImg {
+   float: left;
+}
+
+#secondImg {
+   float: right;
+}
+
+#worker_ms {
+   width: 100%;
+}
+
+#message_result {
+   float: left;
+   width: 600px;
+   height: 300px;
+   background-color: blue;
+   color: white;
+   overflow: scroll;
+   background-color: blue;
+}
+
+#worker_ms button {
+   float: right;
+   color: white;
+   background: black;
+   width: 100px;
+   height: 40px;
+   clear: right;
+}
+</style>
+<script type="text/javascript" src="./js/blob.js"></script>
+<script type="text/javascript" src="./js/filer.js"></script>
+<script type="text/javascript" src="./js/parallel.js"></script>
+<script type="text/javascript" src="./js/forkCanvas.js"></script>
+</head>
+<body>
+   <!-- ANTS_TAG : add here timing profiling and change worker API to appropriate parallel.js -->
+   <div id="mainContent">
+      <div id="canvas_element">
+         <canvas id="appCanvas" width="400" height="200"></canvas>
+         <canvas id="copyCanvas" width="400" height="200"></canvas>
+      </div>
+      <br />
+      <div id="imagesBlock">
+         <img id="firstImg" alt="snapshot_base64" width="400" height="200" /> <img id="secondImg" alt="snapshot_decoded" width="400"
+            height="200"
+         />
+      </div>
+      <div id="worker_ms">
+         <div id="message_result">
+            <p>init</p>
+         </div>
+         <button onclick="makeSnapshot()">Snapshot!</button>
+         <br />
+         <button onclick="sayHello()">Say Hello!</button>
+         <br />
+         <button onclick="produceImage()">Produce image</button>
+         <br />
+         <button onclick="stop()">Stop</button>
+         <br />
+         <button onclick="clearLog()">Clear log</button>
+         <br />
+         <button onclick="createForkCanvas()">Create fork canvas</button>
+         <br />
+      </div>
+      <script type="text/javascript">
+                            //<![CDATA[
+                            
+                            var appCanvas = document.getElementById("appCanvas"), copyCanvas = document
+                                    .getElementById("copyCanvas");
+                            var appCtx = appCanvas.getContext("2d"), copyCtx = copyCanvas.getContext("2d");
+                            var reader = new FileReader();
+                            var worker = new Worker("./js/worker-canvas.js");
+                            var imageURLBase64, imageURL;
+                            var img = document.getElementById("firstImg");
+                            var imgSecond = document.getElementById("secondImg");
+                            var message_result = document.getElementById("message_result");
+                            var filer = new Filer();
+                            
+                            function logMsg(msg) {
+                                console.log(msg);
+                                message_result.innerHTML += '<p>' + msg + '</p>';
+                                message_result.scrollTop = message_result.scrollHeight;
+                            }
+
+                            var supportsWorkers = !!window.Worker, supportURL = false;
+                            
+                            if (!supportsWorkers) {
+                                logMsg("browser doesn't support worker!");
+                            }
+
+                            function onError(e) {
+                                logMsg(" Error : " + e.name);
+                            }
+
+                            function clearLog() {
+                                message_result.innerHTML = "";
+                            }
+
+                            //temporary and 32 Mb
+                            
+                            filer.init({
+                                persistent : false,
+                                size : 1024 * 1024 * 32
+                            }, function(fs) {
+                                logMsg("Initialize file system");
+                            }, onError);
+                            
+                            //]]>
+                        </script>
+      <script type="text/javascript">
+                            //<![CDATA[
+                            
+                            try {
+                                
+                                if (reader.addEventListener) {
+                                    
+                                    reader.addEventListener("loadend", function() {
+                                        var imageData;
+                                        logMsg("succesfuly loaded array buffer from file URL");
+                                        logMsg("Image data length is :" + reader.result.byteLength);
+                                        imageData = copyCtx.createImageData(copyCanvas.width, copyCanvas.height);
+                                        imageData.data.set(new Uint8ClampedArray(reader.result));
+                                        copyCtx.putImageData(imageData, 0, 0);
+                                        logMsg("added data into canvas");
+                                    });
+                                    
+                                }
+                                else {
+                                    logMsg("browser doesn't support local file system!");
+                                }
+                                
+                                function drawTime() {
+                                    appCtx.font = "13pt Calibri";
+                                    appCtx.fillStyle = "#f00";
+                                    appCtx.clearRect(0, 0, appCanvas.width, appCanvas.height);
+                                    appCtx.fillText(new Date(), 0, 100);
+                                    logMsg("filled text into canvas");
+                                }
+                                
+                                //worker
+                                worker.addEventListener("message", function(e) {
+                                    if (e.data.msg) {
+                                        logMsg(e.data.msg);
+                                    }
+                                    if (e.data.url) {
+                                        loadSnapshot(e.data.url);
+                                    }
+                                });
+                                
+                                function produceImage() {
+                                    var base64Const = "base64,", index = -1;
+                                    logMsg("Producing image");
+                                    drawTime();
+                                    imageURLBase64 = appCanvas.toDataURL('image/png');
+                                    img.addEventListener("load", function() {
+                                        logMsg("Image has been created!");
+                                        logMsg("The url of image is : " + imageURLBase64);
+                                        index = imageURLBase64.indexOf(base64Const);
+                                        logMsg("index : " + index);
+                                        logMsg("decoded part is : " + (imageURLBase64.substring(index + base64Const.length)));
+                                        imageURL = imageURLBase64.substring(0, index)
+                                            + atob(imageURLBase64.substring(index + base64Const.length));
+                                        //                                         imageURL = imageURL.replace(';', ',');
+                                        imgSecond.addEventListener("load", function() {
+                                            logMsg("loaded second image");
+                                        }, false);
+                                        imgSecond.src = imageURL;
+                                    }, false);
+                                    img.src = imageURLBase64;
+                                }
+                                
+                                function sayHello() {
+                                    worker.postMessage({
+                                        "msg" : "hello"
+                                    });
+                                }
+                                
+                                function stop() {
+                                    worker.terminate();
+                                    logMsg("terminated.");
+                                }
+                                
+                                function loadSnapshot(snapshotURL) {
+                                    logMsg("Loading snapshot url : " + snapshotURL);
+                                    filer.open(snapshotURL, function(file) {
+                                        reader.readAsArrayBuffer(file);
+                                    }, onError);
+                                }
+                                
+                                function makeSnapshot() {
+                                    var contentData, transferObj;
+                                    drawTime();
+                                    contentData = appCtx.getImageData(0, 0, appCanvas.width, appCanvas.height).data;
+                                    if (contentData.buffer) {
+                                        contentData = contentData.buffer;
+                                    }
+                                    else {
+                                        // ANTS_TAG : additional implementation, if canvas has old implementation CanvasArrayPixel
+                                    }
+                                    logMsg("type of buffer is : " + contentData);
+                                    transferObj = {
+                                        action : "saveSnapshot",
+                                        content : contentData,
+                                        name : "snapshot.dat"
+                                    };
+                                    
+                                    if (contentData instanceof ArrayBuffer) {
+                                        logMsg("The browser supports typed variables.");
+                                        worker.postMessage(transferObj, [ transferObj.content ]);
+                                    }
+                                    else {
+                                        logMsg("The browser doesn't support typed variables.");
+                                        worker.postMessage(transferObj);
+                                    }
+                                    
+                                }
+                                
+                            }
+                            catch (ex) {
+                                logMsg("Has encountered an error : " + ex);
+                            }
+
+                            //]]>
+                        </script>
+      <script type="text/javascript">
+                            //<![CDATA[
+                            
+                            // ANTS_TAG : add here testing of console.memory!!!
+                            
+                            function createForkCanvas() {
+                                if (workerUtility && workerUtility.createCanvas) {
+                                    var forkCanvas, dataView, affineMatrix, index, imageData, arrayBuf, secondForkCanvas;
+                                    
+                                    //serialization
+                                    /* imageData = appCtx.getImageData(0, 0, 300, 150);
+                                    forkCanvas = workerUtility.createCanvas(300, 150, imageData.data.buffer);
+                                    logMsg("Newer object of forked canvas : " + forkCanvas);
+                                    logMsg("Type of created object is : " + forkCanvas.type());
+                                    logMsg("Width of created object is : " + forkCanvas.width());
+                                    logMsg("Height of created object is : " + forkCanvas.height());
+                                    logMsg("Affine matrix of created object is : " + forkCanvas.transform());
+                                    logMsg("Serialization : " + forkCanvas.getBytes()); 
+                                    
+                                    forkCanvas = workerUtility.createCanvas(forkCanvas.getBytes());
+                                    logMsg("Serialization object : " + forkCanvas);
+                                    logMsg("Serialization object type is : " + forkCanvas.type());
+                                    logMsg("Serialization object width is : " + forkCanvas.width());
+                                    logMsg("Serialization object height is : " + forkCanvas.height());
+                                    logMsg("Serialization object affine matrix is : " + forkCanvas.transform()); */
+
+                                    // coping data
+                                    /* imageData = appCtx.getImageData(0, 60, 400, 80);
+                                    forkCanvas = workerUtility.createCanvas(400, 80, imageData.data.buffer);
+                                    secondForkCanvas = workerUtility.createCanvas(appCanvas.width, appCanvas.height);
+                                    forkCanvas.setTransform(2, 0, 0, 2, 0, 0);
+                                    logMsg("Before translation canvas : " + secondForkCanvas);
+                                    secondForkCanvas.translate(-20, -40);
+                                    logMsg("Translated canvas : " + secondForkCanvas);
+                                    secondForkCanvas.putImageData(forkCanvas.getImageData(0, 0, 400, 80), 0, 0, 400, 80);
+                                    
+                                    arrayBuf = new Uint8Array(secondForkCanvas.getImageData());
+                                    imageData = copyCtx.createImageData(400, 200);
+                                    imageData.data.set(new Uint8ClampedArray(arrayBuf));
+                                    copyCtx.putImageData(imageData, 0, 0);
+                                    logMsg("added data into canvas"); */
+                                    
+                                    // drawing surface on surface with transformation
+                                    forkCanvas = workerUtility.createCanvas(appCanvas.width, appCanvas.height);
+                                    //untransparent blue
+                                    forkCanvas.drawColor(0x0000FFFF);
+                                    secondForkCanvas = workerUtility.createCanvas(appCanvas.width, appCanvas.height, appCtx.getImageData(0, 0, appCanvas.width, appCanvas.height).data.buffer);
+                                    logMsg("drawing object : " + forkCanvas.toString() );
+                                    secondForkCanvas.rotate(Math.random(Math.PI));
+                                    logMsg("rotating object : " + forkCanvas.toString() );
+                                    // secondForkCanvas. ANTS_TAG : create definition of origin!
+                                    secondForkCanvas.draw(forkCanvas,100,100,40,30,100,88,40,20);
+                                    imageData = copyCtx.createImageData(secondForkCanvas.width(), secondForkCanvas.height());
+                                    arrayBuf = secondForkCanvas.getImageData();
+                                    imageData.data.set(new Uint8ClampedArray(arrayBuf));
+                                    copyCtx.putImageData(imageData, 0, 0);
+                                    logMsg("drawing forked canvas on forked canvas");
+
+                                }
+                                else {
+                                    logMsg("doesn't initialize fork canvas!");
+                                }
+                            }
+
+                            //]]>
+                        </script>
+   </div>
+</body>
+</html>
